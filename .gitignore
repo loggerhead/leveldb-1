@@ -5,3 +5,5 @@
 
 # Build directory.
 out/
+build/
+!build/build.sh

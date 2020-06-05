@@ -299,10 +299,6 @@ if(LEVELDB_BUILD_TESTS)
   leveldb_test("${PROJECT_SOURCE_DIR}/db/c_test.c")
   leveldb_test("${PROJECT_SOURCE_DIR}/db/fault_injection_test.cc")
 
-  leveldb_test("${PROJECT_SOURCE_DIR}/issues/issue178_test.cc")
-  leveldb_test("${PROJECT_SOURCE_DIR}/issues/issue200_test.cc")
-  leveldb_test("${PROJECT_SOURCE_DIR}/issues/issue320_test.cc")
-
   leveldb_test("${PROJECT_SOURCE_DIR}/util/env_test.cc")
   leveldb_test("${PROJECT_SOURCE_DIR}/util/status_test.cc")
   leveldb_test("${PROJECT_SOURCE_DIR}/util/no_destructor_test.cc")
@@ -377,12 +373,6 @@ if(LEVELDB_BUILD_BENCHMARKS)
     leveldb_benchmark("${PROJECT_SOURCE_DIR}/db/db_bench.cc")
   endif(NOT BUILD_SHARED_LIBS)
 
-  check_library_exists(sqlite3 sqlite3_open "" HAVE_SQLITE3)
-  if(HAVE_SQLITE3)
-    leveldb_benchmark("${PROJECT_SOURCE_DIR}/doc/bench/db_bench_sqlite3.cc")
-    target_link_libraries(db_bench_sqlite3 sqlite3)
-  endif(HAVE_SQLITE3)
-
   # check_library_exists is insufficient here because the library names have
   # different manglings when compiled with clang or gcc, at least when installed
   # with Homebrew on Mac.
@@ -398,10 +388,6 @@ int main() {
 }
   "  HAVE_KYOTOCABINET)
   set(CMAKE_REQUIRED_LIBRARIES ${OLD_CMAKE_REQURED_LIBRARIES})
-  if(HAVE_KYOTOCABINET)
-    leveldb_benchmark("${PROJECT_SOURCE_DIR}/doc/bench/db_bench_tree_db.cc")
-    target_link_libraries(db_bench_tree_db kyotocabinet)
-  endif(HAVE_KYOTOCABINET)
 endif(LEVELDB_BUILD_BENCHMARKS)
 
 if(LEVELDB_INSTALL)

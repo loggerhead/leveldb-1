@@ -99,6 +99,7 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
     assert(r->options.comparator->Compare(key, Slice(r->last_key)) > 0);
   }
 
+  // 4. 记录每个 block 最后的 key，用作索引
   if (r->pending_index_entry) {
     assert(r->data_block.empty());
     // TODO: 最长公共子串
@@ -106,19 +107,24 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
     std::string handle_encoding;
     r->pending_handle.EncodeTo(&handle_encoding);
     r->index_block.Add(r->last_key, Slice(handle_encoding));
+    // pending_index_entry 用于标识是不是还有 index 没写入磁盘
+    // 每次 data_block 写磁盘 pending_index_entry 才变成 true
     r->pending_index_entry = false;
   }
 
+  // 1. TODO: filter_block 是干嘛的？
   if (r->filter_block != nullptr) {
     r->filter_block->AddKey(key);
   }
 
+  // 2. 新增 key、value
   // last_key = key
   r->last_key.assign(key.data(), key.size());
+  // num_entries 被当成 bool 使用，即 num_entries == 0。其它的用途为：单元测试、打运行日志
   r->num_entries++;
   r->data_block.Add(key, value);
 
-  // 超过了 block_size 就写磁盘
+  // 3. 超过了 block_size 就写磁盘
   const size_t estimated_block_size = r->data_block.CurrentSizeEstimate();
   if (estimated_block_size >= r->options.block_size) {
     Flush();
@@ -200,19 +206,20 @@ Status TableBuilder::status() const { return rep_->status; }
 
 Status TableBuilder::Finish() {
   Rep* r = rep_;
+  // 1. 完成剩余的 data block 写入
   Flush();
   assert(!r->closed);
   r->closed = true;
 
   BlockHandle filter_block_handle, metaindex_block_handle, index_block_handle;
 
-  // Write filter block
+  // 2. Write filter block
   if (ok() && r->filter_block != nullptr) {
     WriteRawBlock(r->filter_block->Finish(), kNoCompression,
                   &filter_block_handle);
   }
 
-  // Write metaindex block
+  // 3. Write metaindex block
   if (ok()) {
     BlockBuilder meta_index_block(&r->options);
     if (r->filter_block != nullptr) {
@@ -228,8 +235,11 @@ Status TableBuilder::Finish() {
     WriteBlock(&meta_index_block, &metaindex_block_handle);
   }
 
-  // Write index block
+  // 4. Write index block
   if (ok()) {
+    // 跟 102 行的代码一模一样
+    // 最后一次 data_block 写磁盘以后，还可能有 index 没记录，因此在这里完成最后一个 index 的记录
+    // TODO: 为什么不放到 Flush() 里？
     if (r->pending_index_entry) {
       r->options.comparator->FindShortSuccessor(&r->last_key);
       std::string handle_encoding;
@@ -240,7 +250,7 @@ Status TableBuilder::Finish() {
     WriteBlock(&r->index_block, &index_block_handle);
   }
 
-  // Write footer
+  // 5. Write footer
   if (ok()) {
     Footer footer;
     footer.set_metaindex_handle(metaindex_block_handle);

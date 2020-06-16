@@ -653,8 +653,7 @@ void DBImpl::MaybeScheduleCompaction() {
     // DB is being deleted; no more background compactions
   } else if (!bg_error_.ok()) {
     // Already got an error; no more changes
-  } else if (imm_ == nullptr && manual_compaction_ == nullptr &&
-             !versions_->NeedsCompaction()) {
+  } else if (imm_ == nullptr && manual_compaction_ == nullptr && !versions_->NeedsCompaction()) {
     // No work to be done
   } else {
     background_compaction_scheduled_ = true;
@@ -892,7 +891,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   // Release mutex while we're actually doing the compaction work
   mutex_.Unlock();
 
-  // 0. TODO: 从所有需要压缩的文件生成一个 key、value 迭代器
+  // 0. 从所有需要压缩的文件生成一个 key、value 迭代器
   Iterator* input = versions_->MakeInputIterator(compact->compaction);
   input->SeekToFirst();
   Status status;
@@ -1090,18 +1089,18 @@ int64_t DBImpl::TEST_MaxNextLevelOverlappingBytes() {
   return versions_->MaxNextLevelOverlappingBytes();
 }
 
-Status DBImpl::Get(const ReadOptions& options, const Slice& key,
-                   std::string* value) {
+Status DBImpl::Get(const ReadOptions& options, const Slice& key, std::string* value) {
   Status s;
   MutexLock l(&mutex_);
+  // 生成一个序列号
   SequenceNumber snapshot;
   if (options.snapshot != nullptr) {
-    snapshot =
-        static_cast<const SnapshotImpl*>(options.snapshot)->sequence_number();
+    snapshot = static_cast<const SnapshotImpl*>(options.snapshot)->sequence_number();
   } else {
     snapshot = versions_->LastSequence();
   }
 
+  // 引用计数
   MemTable* mem = mem_;
   MemTable* imm = imm_;
   Version* current = versions_->current();
@@ -1122,6 +1121,7 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
     } else if (imm != nullptr && imm->Get(lkey, value, &s)) {
       // Done
     } else {
+      // memtable 没查到就去查 SSTable
       s = current->Get(options, lkey, value, &stats);
       have_stat_update = true;
     }
@@ -1311,8 +1311,10 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // Yield previous error
       s = bg_error_;
       break;
-    } else if (allow_delay && versions_->NumLevelFiles(0) >=
-                                  config::kL0_SlowdownWritesTrigger) {
+    // 当 level-0 文件 >= 慢写的值时，每个 write 操作 sleep 1ms，
+    // 保证不会因为 level-0 文件达到上限，触发强制合并，导致某个 write 阻塞几秒钟。
+    // 每个 write 操作最多 sleep 一次
+    } else if (allow_delay && versions_->NumLevelFiles(0) >= config::kL0_SlowdownWritesTrigger) {
       // We are getting close to hitting a hard limit on the number of
       // L0 files.  Rather than delaying a single write by several
       // seconds when we hit the hard limit, start delaying each
@@ -1323,8 +1325,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       env_->SleepForMicroseconds(1000);
       allow_delay = false;  // Do not delay a single write more than once
       mutex_.Lock();
-    } else if (!force &&
-               (mem_->ApproximateMemoryUsage() <= options_.write_buffer_size)) {
+    } else if (!force && (mem_->ApproximateMemoryUsage() <= options_.write_buffer_size)) {
       // There is room in current memtable
       break;
     } else if (imm_ != nullptr) {
@@ -1338,6 +1339,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       background_work_finished_signal_.Wait();
     } else {
       // Attempt to switch to a new memtable and trigger compaction of old
+      // 1. 创建一个日志文件
       assert(versions_->PrevLogNumber() == 0);
       uint64_t new_log_number = versions_->NewFileNumber();
       WritableFile* lfile = nullptr;
@@ -1352,6 +1354,8 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       logfile_ = lfile;
       logfile_number_ = new_log_number;
       log_ = new log::Writer(lfile);
+
+      // 2. 创建一个新的 memtable
       imm_ = mem_;
       has_imm_.store(true, std::memory_order_release);
       mem_ = new MemTable(internal_comparator_);

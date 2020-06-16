@@ -77,8 +77,7 @@ void InternalKeyComparator::FindShortestSeparator(std::string* start,
       user_comparator_->Compare(user_start, tmp) < 0) {
     // User key has become shorter physically, but larger logically.
     // Tack on the earliest possible number to the shortened user key.
-    PutFixed64(&tmp,
-               PackSequenceAndType(kMaxSequenceNumber, kValueTypeForSeek));
+    PutFixed64(&tmp, PackSequenceAndType(kMaxSequenceNumber, kValueTypeForSeek));
     assert(this->Compare(*start, tmp) < 0);
     assert(this->Compare(tmp, limit) < 0);
     start->swap(tmp);
@@ -121,19 +120,25 @@ bool InternalFilterPolicy::KeyMayMatch(const Slice& key, const Slice& f) const {
 LookupKey::LookupKey(const Slice& user_key, SequenceNumber s) {
   size_t usize = user_key.size();
   size_t needed = usize + 13;  // A conservative estimate
+  // 空间够，就用 space_，否则 alloc
   char* dst;
   if (needed <= sizeof(space_)) {
     dst = space_;
   } else {
     dst = new char[needed];
   }
+
+  // | usize+8 | user_key | s | kValueTypeForSeek |
+  //  varint32    usize     7           1
   start_ = dst;
   dst = EncodeVarint32(dst, usize + 8);
+  // user_key start pointer
   kstart_ = dst;
   memcpy(dst, user_key.data(), usize);
   dst += usize;
   EncodeFixed64(dst, PackSequenceAndType(s, kValueTypeForSeek));
   dst += 8;
+  // last pointer
   end_ = dst;
 }
 

@@ -344,11 +344,14 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
     size_t num_files = files_[level].size();
     if (num_files == 0) continue;
 
+    // 找到可能包含 key 的文件
     // Get the list of files to search in this level
     FileMetaData* const* files = &files_[level][0];
+    // 1. level-0 比较特殊，它的文件之间可能有重复的 key
     if (level == 0) {
       // Level-0 files may overlap each other.  Find all files that
       // overlap user_key and process them in order from newest to oldest.
+      // 如果 user_key 落在文件中，则将文件记录到 tmp
       tmp.reserve(num_files);
       for (uint32_t i = 0; i < num_files; i++) {
         FileMetaData* f = files[i];
@@ -359,9 +362,11 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
       }
       if (tmp.empty()) continue;
 
+      // TODO: 最新的排最前面，目的是降低遍历文件的耗时
       std::sort(tmp.begin(), tmp.end(), NewestFirst);
       files = &tmp[0];
       num_files = tmp.size();
+    // 2. level-L 找到对应的文件
     } else {
       // Binary search to find earliest index whose largest key >= ikey.
       uint32_t index = FindFile(vset_->icmp_, files_[level], ikey);
@@ -381,6 +386,7 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
       }
     }
 
+    // 逐文件查找 key
     for (uint32_t i = 0; i < num_files; ++i) {
       if (last_file_read != nullptr && stats->seek_file == nullptr) {
         // We have had more than one seek for this read.  Charge the 1st file.

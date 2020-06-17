@@ -167,6 +167,7 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
 
   if (s.ok()) {
     BlockContents contents;
+    // 有块缓存就先从缓存读，读不到再读文件
     if (block_cache != nullptr) {
       char cache_key_buffer[16];
       EncodeFixed64(cache_key_buffer, table->rep_->cache_id);
@@ -185,6 +186,7 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
           }
         }
       }
+    // 否则，直接读文件
     } else {
       s = ReadBlock(table->rep_->file, options, handle, &contents);
       if (s.ok()) {
@@ -193,6 +195,7 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
     }
   }
 
+  // 将 block 转成迭代器，方便遍历
   Iterator* iter;
   if (block != nullptr) {
     iter = block->NewIterator(table->rep_->options.comparator);
@@ -217,9 +220,11 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,
                           void (*handle_result)(void*, const Slice&,
                                                 const Slice&)) {
   Status s;
+  // 1. 在索引块中查 key
   Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
   iiter->Seek(k);
   if (iiter->Valid()) {
+    // 2. 对比索引中的 key 与用户 k 是否相等
     Slice handle_value = iiter->value();
     FilterBlockReader* filter = rep_->filter;
     BlockHandle handle;
@@ -227,8 +232,10 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,
         !filter->KeyMayMatch(handle.offset(), k)) {
       // Not found
     } else {
+      // 3. key 相等说明查到值了，读出值所在的 block，取出值并返回
       Iterator* block_iter = BlockReader(this, options, iiter->value());
       block_iter->Seek(k);
+      // 4. 查到了就回调 handle_result
       if (block_iter->Valid()) {
         (*handle_result)(arg, block_iter->key(), block_iter->value());
       }

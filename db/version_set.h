@@ -307,7 +307,9 @@ class VersionSet {
   // Opened lazily
   WritableFile* descriptor_file_;
   log::Writer* descriptor_log_;
+  // 空的 version，用来表示双向链表的头部
   Version dummy_versions_;  // Head of circular doubly-linked list of versions.
+  // current_ 是双向链表的尾部
   Version* current_;        // == dummy_versions_.prev_
 
   // Per-level key at which the next compaction at that level should start.

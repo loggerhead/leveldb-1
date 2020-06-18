@@ -102,7 +102,7 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
   // 4. 记录每个 block 最后的 key，用作索引
   if (r->pending_index_entry) {
     assert(r->data_block.empty());
-    // TODO: 最长公共子串
+    // TODO(tyrion): 最长公共子串
     r->options.comparator->FindShortestSeparator(&r->last_key, key);
     std::string handle_encoding;
     r->pending_handle.EncodeTo(&handle_encoding);
@@ -112,7 +112,7 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
     r->pending_index_entry = false;
   }
 
-  // 1. TODO: filter_block 是干嘛的？
+  // 1. TODO(tyrion): filter_block 是干嘛的？
   if (r->filter_block != nullptr) {
     r->filter_block->AddKey(key);
   }
@@ -239,7 +239,7 @@ Status TableBuilder::Finish() {
   if (ok()) {
     // 跟 102 行的代码一模一样
     // 最后一次 data_block 写磁盘以后，还可能有 index 没记录，因此在这里完成最后一个 index 的记录
-    // TODO: 为什么不放到 Flush() 里？
+    // TODO(tyrion): 为什么不放到 Flush() 里？
     if (r->pending_index_entry) {
       r->options.comparator->FindShortSuccessor(&r->last_key);
       std::string handle_encoding;

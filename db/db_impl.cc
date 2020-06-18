@@ -229,6 +229,9 @@ void DBImpl::DeleteObsoleteFiles() {
     return;
   }
 
+  // 压缩完成后，读操作可能还在读文件，因此不能直接删除
+  // 只有引用计数归 0，从 versions_ 链表里被删掉的 Version 能保证没有被使用了
+  // 这部分文件可以安全的删除
   // Make a set of all of the live files
   std::set<uint64_t> live = pending_outputs_;
   versions_->AddLiveFiles(&live);
@@ -242,8 +245,7 @@ void DBImpl::DeleteObsoleteFiles() {
       bool keep = true;
       switch (type) {
         case kLogFile:
-          keep = ((number >= versions_->LogNumber()) ||
-                  (number == versions_->PrevLogNumber()));
+          keep = ((number >= versions_->LogNumber()) || (number == versions_->PrevLogNumber()));
           break;
         case kDescriptorFile:
           // Keep my manifest file, and any newer incarnations'
@@ -269,8 +271,6 @@ void DBImpl::DeleteObsoleteFiles() {
         if (type == kTableFile) {
           table_cache_->Evict(number);
         }
-        Log(options_.info_log, "Delete type=%d #%lld\n", static_cast<int>(type),
-            static_cast<unsigned long long>(number));
         env_->DeleteFile(dbname_ + "/" + filenames[i]);
       }
     }
@@ -297,13 +297,11 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
         return s;
       }
     } else {
-      return Status::InvalidArgument(
-          dbname_, "does not exist (create_if_missing is false)");
+      return Status::InvalidArgument(dbname_, "does not exist (create_if_missing is false)");
     }
   } else {
     if (options_.error_if_exists) {
-      return Status::InvalidArgument(dbname_,
-                                     "exists (error_if_exists is true)");
+      return Status::InvalidArgument(dbname_, "exists (error_if_exists is true)");
     }
   }
 
@@ -923,7 +921,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       }
     }
 
-    // 2. TODO:
+    // 2. TODO(tyrion):
     // Handle key/value, add to state, etc.
     bool drop = false;
     if (!ParseInternalKey(key, &ikey)) {
@@ -1017,7 +1015,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   mutex_.Lock();
   stats_[compact->compaction->level() + 1].Add(stats);
 
-  // 8. TODO:
+  // 8. TODO(tyrion):
   if (status.ok()) {
     status = InstallCompactionResults(compact);
   }
@@ -1498,6 +1496,7 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
     edit.SetLogNumber(impl->logfile_number_);
     s = impl->versions_->LogAndApply(&edit, &impl->mutex_);
   }
+  // 因为每次退出的状态是未知的，可能异常退出导致压缩过程中止，因此打开时进行一次清理和压缩
   if (s.ok()) {
     impl->DeleteObsoleteFiles();
     impl->MaybeScheduleCompaction();

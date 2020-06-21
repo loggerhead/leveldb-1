@@ -5,7 +5,7 @@
 using namespace std;
 
 int main(int argc, char *argv[]) {
-  // ´ò¿ªÊý¾Ý¿â¡£Èç¹û²»´æÔÚÔò´´½¨
+  // æ‰“å¼€æ•°æ®åº“ã€‚å¦‚æžœä¸å­˜åœ¨åˆ™åˆ›å»º
   leveldb::DB* db;
   leveldb::Options options;
   options.create_if_missing = true;
@@ -16,13 +16,14 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  // ¶ÁÐ´²Ù×÷
+  // è¯»å†™æ“ä½œ
   std::string k = "foo";
   std::string v;
   s = db->Put(leveldb::WriteOptions(), k, "bar");
+  s = db->Put(leveldb::WriteOptions(), k, "zoo");
   s = db->Get(leveldb::ReadOptions(), k, &v);
 
-  // ±éÀúÕû¸öÊý¾Ý¿â
+  // éåŽ†æ•´ä¸ªæ•°æ®åº“
   leveldb::Iterator* it = db->NewIterator(leveldb::ReadOptions());
   for (it->SeekToFirst(); it->Valid(); it->Next()) {
     cout << it->key().ToString() << ": "  << it->value().ToString() << endl;
@@ -32,7 +33,7 @@ int main(int argc, char *argv[]) {
   }
   delete it;
 
-  // ¹Ø±ÕÊý¾Ý¿â
+  // å…³é—­æ•°æ®åº“
   delete db;
   return 0;
 }
